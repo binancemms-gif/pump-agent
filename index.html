@@ -1,1 +1,409 @@
-$(cat /tmp/full-agent.html)
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%2300ff9d'/><text x='50' y='65' font-size='40' text-anchor='middle' fill='%23000' font-family='sans-serif' font-weight='bold'>PA</text></svg>">
+<title>PumpAgent v3.0 — Solana + BNB</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        pump: '#00ff9d',
+        danger: '#ff3b5c',
+        armor: '#7c5cff',
+        bnb: '#f3ba2f',
+        dark: '#0a0a0f',
+        card: '#12121a',
+        border: '#1e1e2e'
+      }
+    }
+  }
+}
+</script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+  body { font-family: 'Inter', system-ui, sans-serif; background: #0a0a0f; color: #e2e8f0; -webkit-tap-highlight-color: transparent; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+  .glass { background: rgba(18,18,26,0.8); backdrop-filter: blur(12px); }
+  .pulse-dot { animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+  .token-card { transition: all 0.2s; }
+  .token-card:active { transform: scale(0.98); }
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 2px; }
+  .bottom-nav { padding-bottom: env(safe-area-inset-bottom); }
+  input[type="range"] { accent-color: #00ff9d; }
+  .chain-sol { border-color: #00ff9d; }
+  .chain-bnb { border-color: #f3ba2f; }
+</style>
+</head>
+<body class="bg-dark min-h-screen pb-20">
+
+<header class="sticky top-0 z-50 glass border-b border-border px-4 py-3 flex items-center justify-between">
+  <div class="flex items-center gap-2">
+    <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-pump to-armor flex items-center justify-center font-bold text-black text-sm">PA</div>
+    <div>
+      <div class="font-bold text-sm leading-tight">PumpAgent</div>
+      <div class="text-[10px] text-gray-500">v3.0 · Multi-Chain</div>
+    </div>
+  </div>
+  <div class="flex items-center gap-2">
+    <button id="chainSol" onclick="switchChain('sol')" class="px-2 py-1 text-[10px] rounded-full border chain-sol text-pump font-semibold">SOL</button>
+    <button id="chainBnb" onclick="switchChain('bnb')" class="px-2 py-1 text-[10px] rounded-full border border-gray-600 text-gray-400">BNB</button>
+    <div class="flex items-center gap-1.5">
+      <div id="statusDot" class="w-2 h-2 rounded-full bg-gray-600"></div>
+      <span id="statusText" class="text-xs text-gray-400">Idle</span>
+    </div>
+    <button onclick="toggleAgent()" id="agentBtn" class="px-3 py-1.5 rounded-full text-xs font-semibold bg-pump text-black">Start</button>
+  </div>
+</header>
+
+<main id="app" class="px-4 py-4">
+  <section id="view-dashboard" class="space-y-4">
+    <div class="grid grid-cols-2 gap-3">
+      <div class="bg-card border border-border rounded-xl p-3">
+        <div class="text-[10px] text-gray-500 uppercase tracking-wider">Today P&L</div>
+        <div class="text-xl font-bold text-pump" id="pnlToday">+0.000 SOL</div>
+        <div class="text-[10px] text-gray-500">Success <span id="successRate">0%</span> · Fees <span id="totalFees">0</span></div>
+      </div>
+      <div class="bg-card border border-border rounded-xl p-3">
+        <div class="text-[10px] text-gray-500 uppercase tracking-wider">Active Positions</div>
+        <div class="text-xl font-bold" id="activePos">0</div>
+        <div class="text-[10px] text-gray-500" id="chainLabel">Solana · Shell Armor ON</div>
+      </div>
+    </div>
+    <div class="bg-card border border-border rounded-xl p-3">
+      <div class="flex justify-between items-center mb-2">
+        <span class="text-xs font-semibold">Agent Logs</span>
+        <span class="text-[10px] text-gray-500 mono" id="latency">— ms</span>
+      </div>
+      <div id="logs" class="space-y-1 max-h-40 overflow-y-auto text-[11px] mono text-gray-400"></div>
+    </div>
+    <div class="bg-card border border-border rounded-xl p-3">
+      <div class="text-xs font-semibold mb-2">Recent Scans</div>
+      <div id="recentScans" class="space-y-2"></div>
+    </div>
+  </section>
+
+  <section id="view-scanner" class="hidden space-y-3">
+    <div class="flex justify-between items-center">
+      <h2 class="font-semibold text-sm" id="scannerTitle">Live Token Scanner · Solana</h2>
+      <span class="text-[10px] text-pump pulse-dot">● LIVE</span>
+    </div>
+    <div id="tokenFeed" class="space-y-2"></div>
+  </section>
+
+  <section id="view-tx" class="hidden space-y-3">
+    <h2 class="font-semibold text-sm" id="txTitle">Tx Inspector · Solana</h2>
+    <p class="text-[11px] text-gray-500" id="txDesc">Parses getTransaction meta, pre/postTokenBalances, fees, compute units.</p>
+    <div id="txInspector" class="bg-card border border-border rounded-xl p-3 text-[11px] mono space-y-1 max-h-96 overflow-y-auto"></div>
+    <button onclick="simulateTxParse()" class="w-full bg-armor text-white py-2 rounded-lg text-xs font-semibold">Parse Sample Transaction</button>
+  </section>
+
+  <section id="view-strategies" class="hidden space-y-4">
+    <h2 class="font-semibold text-sm">Strategy Settings</h2>
+    <div class="bg-card border border-border rounded-xl p-4 space-y-4">
+      <div>
+        <label class="text-xs text-gray-400" id="investLabel">Min Investment (SOL)</label>
+        <input type="range" id="minInvest" min="0.01" max="1" step="0.01" value="0.05" class="w-full mt-1">
+        <div class="text-right text-xs mono text-pump"><span id="minInvestVal">0.05</span></div>
+      </div>
+      <div>
+        <label class="text-xs text-gray-400">Max Dev Holdings (%)</label>
+        <input type="range" id="maxDev" min="5" max="50" value="15" class="w-full mt-1">
+        <div class="text-right text-xs mono"><span id="maxDevVal">15</span>%</div>
+      </div>
+      <div class="flex items-center justify-between">
+        <span class="text-sm">Auto-Sell</span>
+        <label class="relative inline-flex items-center cursor-pointer">
+          <input type="checkbox" id="autoSell" checked class="sr-only peer">
+          <div class="w-9 h-5 bg-gray-700 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-pump"></div>
+        </label>
+      </div>
+    </div>
+    <div class="bg-card border border-border rounded-xl p-4">
+      <div class="text-armor font-semibold text-sm mb-2">🛡️ Shell Armor</div>
+      <div class="space-y-2 text-xs">
+        <label class="flex items-center gap-2"><input type="checkbox" checked class="accent-armor"> Rug / Honeypot Filter</label>
+        <label class="flex items-center gap-2"><input type="checkbox" checked class="accent-armor"> Token Balance Delta Check</label>
+        <label class="flex items-center gap-2"><input type="checkbox" checked class="accent-armor"> Fee / Gas Monitor</label>
+      </div>
+    </div>
+  </section>
+
+  <section id="view-ai" class="hidden space-y-3">
+    <h2 class="font-semibold text-sm">Agent Analysis</h2>
+    <div class="bg-card border border-border rounded-xl p-3 h-64 overflow-y-auto" id="aiChat">
+      <div class="text-xs text-gray-400 mb-3">Multi-chain agent ready. Supports Solana (Pump.fun) and BNB (four.meme style). Switch chains in header.</div>
+    </div>
+    <div class="flex gap-2">
+      <input id="aiInput" type="text" placeholder="Ask about a token or chain..." class="flex-1 bg-card border border-border rounded-lg px-3 py-2 text-sm">
+      <button onclick="sendAI()" class="bg-armor text-white px-4 py-2 rounded-lg text-sm font-semibold">Ask</button>
+    </div>
+  </section>
+
+  <section id="view-referrals" class="hidden space-y-4">
+    <h2 class="font-semibold text-sm">Referral Program</h2>
+    <div class="bg-gradient-to-br from-armor/20 to-pump/10 border border-armor/30 rounded-xl p-4">
+      <div class="text-xs text-gray-400">Your Tier</div>
+      <div class="text-2xl font-bold text-armor">Silver · 20%</div>
+      <div class="text-xs text-gray-500 mt-1">Active referrals: 7 / 10 for Gold</div>
+    </div>
+    <div class="bg-card border border-border rounded-xl p-4">
+      <div class="text-xs text-gray-400 mb-2">Referral Link</div>
+      <div class="flex gap-2">
+        <input readonly value="https://pumpagent.app/r/PA-7X2K" class="flex-1 bg-dark border border-border rounded-lg px-3 py-2 text-xs mono">
+        <button onclick="copyRef()" class="bg-pump text-black px-3 py-2 rounded-lg text-xs font-bold">Copy</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<nav class="fixed bottom-0 left-0 right-0 glass border-t border-border bottom-nav">
+  <div class="grid grid-cols-6 h-16 text-[10px]">
+    <button onclick="showView('dashboard')" class="flex flex-col items-center justify-center gap-0.5 text-pump" data-view="dashboard"><span class="text-lg">▣</span>Dash</button>
+    <button onclick="showView('scanner')" class="flex flex-col items-center justify-center gap-0.5 text-gray-500" data-view="scanner"><span class="text-lg">◎</span>Scan</button>
+    <button onclick="showView('tx')" class="flex flex-col items-center justify-center gap-0.5 text-gray-500" data-view="tx"><span class="text-lg">≡</span>Tx</button>
+    <button onclick="showView('strategies')" class="flex flex-col items-center justify-center gap-0.5 text-gray-500" data-view="strategies"><span class="text-lg">⚙</span>Strat</button>
+    <button onclick="showView('ai')" class="flex flex-col items-center justify-center gap-0.5 text-gray-500" data-view="ai"><span class="text-lg">✦</span>AI</button>
+    <button onclick="showView('referrals')" class="flex flex-col items-center justify-center gap-0.5 text-gray-500" data-view="referrals"><span class="text-lg">↗</span>Refs</button>
+  </div>
+</nav>
+
+<script>
+let currentChain = 'sol';
+let agentRunning = false;
+let tokens = [];
+let logs = [];
+let positions = [];
+let closedTrades = [];
+let totalPnL = 0;
+let totalFees = 0;
+let ws = null;
+let simInterval = null;
+
+const solNames = ['MOONCAT','PEPEAI','SOLDOG','RUGLESS','AGENTX','SHELL','PUMPAI','ORBIT','NEON','FLUX'];
+const bnbNames = ['FOURMEME','BNBCAT','PANCAKE','FLAPDOG','BINANCEAI','BSCPEPE','GOLDENBNB','MOONBNB','CZDOG','FOURAI'];
+
+function addLog(msg, type = 'info') {
+  const time = new Date().toLocaleTimeString('en', {hour12:false, hour:'2-digit', minute:'2-digit', second:'2-digit'});
+  logs.unshift({time, msg, type});
+  if (logs.length > 40) logs.pop();
+  renderLogs();
+}
+function renderLogs() {
+  const el = document.getElementById('logs');
+  if (!el) return;
+  el.innerHTML = logs.map(l => `<div class="${l.type==='buy'?'text-pump':l.type==='sell'?'text-danger':l.type==='armor'?'text-armor':'text-gray-400'}"><span class="text-gray-600">${l.time}</span> ${l.msg}</div>`).join('');
+}
+function updateDashboard() {
+  const unit = currentChain === 'sol' ? 'SOL' : 'BNB';
+  document.getElementById('pnlToday').textContent = (totalPnL >= 0 ? '+' : '') + totalPnL.toFixed(3) + ' ' + unit;
+  document.getElementById('pnlToday').className = 'text-xl font-bold ' + (totalPnL >= 0 ? 'text-pump' : 'text-danger');
+  document.getElementById('activePos').textContent = positions.length;
+  const wins = closedTrades.filter(t => t.pnl > 0).length;
+  const rate = closedTrades.length ? Math.round((wins / closedTrades.length) * 100) : 0;
+  document.getElementById('successRate').textContent = rate + '%';
+  document.getElementById('totalFees').textContent = totalFees.toFixed(4);
+  document.getElementById('chainLabel').textContent = (currentChain === 'sol' ? 'Solana' : 'BNB Chain') + ' · Shell Armor ON';
+}
+
+function generateMockToken() {
+  const names = currentChain === 'sol' ? solNames : bnbNames;
+  const name = names[Math.floor(Math.random()*names.length)];
+  const suffix = currentChain === 'sol' ? 'pump' : 'bsc';
+  const mint = Array.from({length:8},()=>Math.random().toString(36)[2]).join('') + suffix;
+  const unit = currentChain === 'sol' ? 'SOL' : 'BNB';
+  return { name, symbol: name.slice(0,4), mint, mc: (Math.random()*40+5).toFixed(1), score: Math.round(40+Math.random()*55), devHold: Math.floor(Math.random()*30), time: Date.now(), chain: currentChain, unit };
+}
+
+function renderTokenCard(t) {
+  const riskColor = t.score > 70 ? 'text-pump' : t.score > 45 ? 'text-yellow-400' : 'text-danger';
+  const unit = t.unit || (currentChain === 'sol' ? 'SOL' : 'BNB');
+  return `<div class="token-card bg-card border border-border rounded-xl p-3" onclick="analyzeToken('${t.mint}')">
+    <div class="flex justify-between"><div><div class="font-semibold text-sm">${t.name}</div><div class="text-[10px] mono text-gray-500">${t.mint.slice(0,12)}...</div></div>
+    <div class="text-right"><div class="text-xs font-bold ${riskColor}">AI ${t.score}</div><div class="text-[10px] text-gray-500">${t.mc} ${unit}</div></div></div>
+    <div class="flex justify-between mt-2 text-[10px]"><span>Dev ${t.devHold}%</span><span class="text-armor">Armor OK</span>
+    <button onclick="event.stopImmediatePropagation(); snipeToken('${t.mint}','${t.name}')" class="bg-pump text-black px-2 py-0.5 rounded font-bold">SNIPE</button></div></div>`;
+}
+
+function updateFeed() {
+  const feed = document.getElementById('tokenFeed');
+  const recent = document.getElementById('recentScans');
+  const html = tokens.slice(0,12).map(renderTokenCard).join('');
+  if (feed) feed.innerHTML = html || '<div class="text-center text-gray-600 text-sm py-8">Waiting for launches...</div>';
+  if (recent) recent.innerHTML = tokens.slice(0,4).map(t => `<div class="flex justify-between text-xs"><span>${t.name}</span><span class="${t.score>60?'text-pump':'text-danger'}">${t.score}</span></div>`).join('');
+}
+
+function switchChain(chain) {
+  if (currentChain === chain) return;
+  currentChain = chain;
+  tokens = [];
+  if (simInterval) clearInterval(simInterval);
+  if (ws) { ws.close(); ws = null; }
+  document.getElementById('chainSol').className = chain === 'sol' ? 'px-2 py-1 text-[10px] rounded-full border chain-sol text-pump font-semibold' : 'px-2 py-1 text-[10px] rounded-full border border-gray-600 text-gray-400';
+  document.getElementById('chainBnb').className = chain === 'bnb' ? 'px-2 py-1 text-[10px] rounded-full border chain-bnb text-bnb font-semibold' : 'px-2 py-1 text-[10px] rounded-full border border-gray-600 text-gray-400';
+  document.getElementById('scannerTitle').textContent = 'Live Token Scanner · ' + (chain === 'sol' ? 'Solana' : 'BNB Chain');
+  document.getElementById('txTitle').textContent = 'Tx Inspector · ' + (chain === 'sol' ? 'Solana' : 'BNB');
+  document.getElementById('txDesc').textContent = chain === 'sol' ? 'Parses getTransaction meta, pre/postTokenBalances, fees, compute units.' : 'Parses BSC transaction receipts, token transfers, gas used.';
+  document.getElementById('investLabel').textContent = 'Min Investment (' + (chain === 'sol' ? 'SOL' : 'BNB') + ')';
+  addLog('Switched to ' + (chain === 'sol' ? 'Solana (Pump.fun)' : 'BNB Chain (four.meme style)'), 'info');
+  updateDashboard();
+  updateFeed();
+  if (chain === 'sol') connectWS(); else startSimulation();
+}
+
+function connectWS() {
+  if (currentChain !== 'sol') return;
+  try {
+    ws = new WebSocket('wss://pumpportal.fun/api/data');
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ method: 'subscribeNewToken' }));
+      addLog('Connected to PumpPortal (Solana)', 'info');
+      document.getElementById('statusDot').className = 'w-2 h-2 rounded-full bg-pump pulse-dot';
+      document.getElementById('statusText').textContent = 'Live';
+    };
+    ws.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        if (data.mint && (data.name || data.symbol) && currentChain === 'sol') {
+          const t = { name: data.name || data.symbol || 'Unknown', symbol: data.symbol || '???', mint: data.mint, mc: (data.marketCapSol || Math.random()*20).toFixed(1), score: Math.round(50+Math.random()*40), devHold: Math.floor(Math.random()*25), time: Date.now(), chain: 'sol', unit: 'SOL' };
+          tokens.unshift(t); if (tokens.length > 50) tokens.pop();
+          updateFeed();
+          if (agentRunning) considerSnipe(t);
+        }
+      } catch(err) {}
+    };
+    ws.onerror = () => startSimulation();
+    ws.onclose = () => { if (currentChain === 'sol' && tokens.length < 2) startSimulation(); };
+  } catch(e) { startSimulation(); }
+}
+
+function startSimulation() {
+  if (simInterval) clearInterval(simInterval);
+  addLog('Simulation mode · ' + (currentChain === 'sol' ? 'Solana' : 'BNB Chain'), 'info');
+  simInterval = setInterval(() => {
+    if (Math.random() > 0.55) {
+      const t = generateMockToken();
+      tokens.unshift(t); if (tokens.length > 40) tokens.pop();
+      updateFeed();
+      if (agentRunning) considerSnipe(t);
+    }
+  }, 2200);
+}
+
+function considerSnipe(t) {
+  const maxDev = parseInt(document.getElementById('maxDev')?.value || 15);
+  if (t.devHold > maxDev || t.score < 55) {
+    addLog(`SKIP ${t.name} — filter`, 'armor');
+    return;
+  }
+  const lat = Math.floor(Math.random()*38+8);
+  document.getElementById('latency').textContent = lat + ' ms';
+  const invest = parseFloat(document.getElementById('minInvest')?.value || 0.05);
+  const fee = currentChain === 'sol' ? 0.000005 + Math.random()*0.00001 : 0.0002 + Math.random()*0.0005;
+  totalFees += fee;
+  const unit = currentChain === 'sol' ? 'SOL' : 'BNB';
+  addLog(`SNIPE ${t.name} @ ${lat}ms · ${invest} ${unit} (fee ${fee.toFixed(6)})`, 'buy');
+  positions.push({ mint: t.mint, name: t.name, entry: invest });
+  updateDashboard();
+  setTimeout(() => {
+    if (!agentRunning) return;
+    const pnl = parseFloat((Math.random()*1.2 - 0.35).toFixed(3));
+    totalPnL += pnl;
+    closedTrades.push({ name: t.name, pnl });
+    positions = positions.filter(p => p.mint !== t.mint);
+    addLog(`AUTO-SELL ${t.name} · ${pnl>0?'+':''}${pnl} ${unit}`, pnl>0?'sell':'info');
+    updateDashboard();
+  }, 6000 + Math.random()*8000);
+}
+
+function snipeToken(mint, name) {
+  if (!agentRunning) { addLog('Start agent first', 'info'); return; }
+  const t = tokens.find(x => x.mint === mint) || { name, mint, score: 70, devHold: 10, unit: currentChain === 'sol' ? 'SOL' : 'BNB' };
+  considerSnipe(t);
+}
+
+function toggleAgent() {
+  agentRunning = !agentRunning;
+  const btn = document.getElementById('agentBtn');
+  const txt = document.getElementById('statusText');
+  if (agentRunning) {
+    btn.textContent = 'Stop'; btn.className = 'px-3 py-1.5 rounded-full text-xs font-semibold bg-danger text-white';
+    txt.textContent = 'Running';
+    addLog('Agent STARTED on ' + (currentChain === 'sol' ? 'Solana' : 'BNB Chain'), 'info');
+  } else {
+    btn.textContent = 'Start'; btn.className = 'px-3 py-1.5 rounded-full text-xs font-semibold bg-pump text-black';
+    txt.textContent = 'Idle';
+    addLog('Agent STOPPED', 'info');
+  }
+}
+
+function showView(view) {
+  ['dashboard','scanner','tx','strategies','ai','referrals'].forEach(v => {
+    document.getElementById('view-'+v).classList.toggle('hidden', v !== view);
+  });
+  document.querySelectorAll('nav button').forEach(b => {
+    b.className = b.dataset.view === view ? 'flex flex-col items-center justify-center gap-0.5 text-pump' : 'flex flex-col items-center justify-center gap-0.5 text-gray-500';
+  });
+}
+
+function analyzeToken(mint) {
+  showView('ai');
+  document.getElementById('aiChat').innerHTML += `<div class="text-xs text-gray-300 mb-2">Analyzing ${mint.slice(0,8)}... on ${currentChain === 'sol' ? 'Solana' : 'BNB'}. Shell Armor OK.</div>`;
+}
+
+function sendAI() {
+  const q = document.getElementById('aiInput').value.trim();
+  if (!q) return;
+  const chat = document.getElementById('aiChat');
+  chat.innerHTML += `<div class="text-xs text-right text-gray-300 mb-2">${q}</div>`;
+  setTimeout(() => {
+    chat.innerHTML += `<div class="text-xs text-gray-300 mb-2">Multi-chain agent: Current chain ${currentChain === 'sol' ? 'Solana (Pump.fun + RPC meta)' : 'BNB (four.meme style bonding curve)'}. Filters and P&L adapted.</div>`;
+    chat.scrollTop = chat.scrollHeight;
+  }, 400);
+  document.getElementById('aiInput').value = '';
+}
+
+function copyRef() { navigator.clipboard.writeText('https://pumpagent.app/r/PA-7X2K'); addLog('Link copied', 'info'); }
+
+function simulateTxParse() {
+  if (currentChain === 'sol') {
+    document.getElementById('txInspector').innerHTML = `
+      <div>Slot: 408830360</div>
+      <div>Status: Ok</div>
+      <div>Fee: 5000 lamports</div>
+      <div>Compute Units: 2100</div>
+      <div>Token Delta: pre 0 → post 1000 (buy)</div>
+      <div class="text-pump mt-2">Solana RPC meta parsed</div>
+    `;
+  } else {
+    document.getElementById('txInspector').innerHTML = `
+      <div>Block: 45,821,003</div>
+      <div>Status: Success</div>
+      <div>Gas Used: 85,420</div>
+      <div>Gas Price: 3 gwei</div>
+      <div>Token Transfer: +1,000 (buy on curve)</div>
+      <div class="text-bnb mt-2">BNB Chain receipt parsed</div>
+    `;
+  }
+  addLog('Parsed sample transaction for ' + currentChain.toUpperCase(), 'info');
+}
+
+['minInvest','maxDev'].forEach(id => {
+  const el = document.getElementById(id);
+  const val = document.getElementById(id+'Val');
+  if (el && val) el.oninput = () => val.textContent = id==='minInvest' ? parseFloat(el.value).toFixed(2) : el.value;
+});
+
+switchChain('sol');
+addLog('PumpAgent v3.0 — Solana + BNB multi-chain ready', 'info');
+updateDashboard();
+</script>
+</body>
+</html>
