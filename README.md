@@ -1,17 +1,17 @@
-# PumpAgent v2.5
+# PumpAgent v3.0
 
-Mobile-first autonomous Pump.fun token scanner and sniper control dashboard.
+Mobile-first autonomous multi-chain token scanner and sniper control dashboard.
 
 ## Features
 
-- **Live Scanner** — Real-time new token feed via PumpPortal WebSocket (falls back to simulation).
+- **Multi-Chain** — Switch between Solana (Pump.fun) and BNB Chain (four.meme style) with one tap.
+- **Live Scanner** — Real-time new token feed on Solana via PumpPortal WebSocket; realistic simulation on BNB.
 - **Autonomous Agent** — Start/stop button. Evaluates tokens against strategy rules + Shell Armor and logs snipe / skip / auto-sell decisions with latency.
-- **Solana RPC Aware** — Parses getTransaction / simulateTransaction structures: meta.fee, computeUnitsConsumed, pre/postTokenBalances for accurate P&L calculation from balance deltas.
-- **Tx Inspector** — View parsed transaction metadata, fees, compute units, and token balance changes.
-- **Strategy Settings** — Min investment, max developer holdings, auto-sell, Shell Armor filters (including token balance delta and fee monitoring).
-- **AI Analysis** — Agent chat that references Solana RPC meta for decisions.
-- **P&L + Success Tracking** — Live dashboard with fees deducted and success rate from closed trades.
-- **Referral Program** — Tiered SOL commissions UI.
+- **Adaptive P&L** — Tracks profit in SOL or BNB depending on active chain, with success rate and fees.
+- **Tx Inspector** — Parses Solana RPC structures (getTransaction meta, pre/postTokenBalances, compute units) or BSC receipts.
+- **Strategy Settings** — Min investment, max developer holdings, auto-sell, Shell Armor filters.
+- **AI Analysis** — Multi-chain aware agent chat.
+- **Referral Program** — Tiered commissions UI.
 - Fully mobile-optimized dark theme, bottom navigation, PWA-ready.
 
 ## Quick Start
@@ -27,6 +27,6 @@ Add to home screen on mobile for app-like experience.
 
 ## Notes
 
-This is a frontend prototype. Real trade execution requires a separate backend bot (never store private keys in the browser). The agent now conceptually uses Solana RPC JSON structures (from the official reference) for more realistic P&L and safety checks.
+This is a frontend prototype. Real trade execution requires a separate backend bot (never store private keys in the browser). Solana uses live PumpPortal data when available; BNB uses simulation modeled on four.meme bonding curves.
 
-High risk: most Pump.fun launches fail. Use only with funds you can afford to lose.
+High risk: most meme launches fail. Use only with funds you can afford to lose.
